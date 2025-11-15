@@ -75,7 +75,7 @@ class Death(Tile):
         surface.blit(self.s, self.rect.topleft)
 
 class Reverse(Tile):
-    def __init__(self, x, y, wall_texture="./reverse_tile.png", base_texture="./reverse_tile_on.png"):
+    def __init__(self, x, y, wall_texture="./images/reverse_tile.png", base_texture="./images/reverse_tile_on.png"):
         super().__init__(x, y)
         self.wall_texture = wall_texture
         self.base_texture = base_texture
@@ -600,7 +600,7 @@ class Game:
         self.transforming_reverse_tiles = []
 
         self.assets = AssetManager()
-        self.assets.load_image("hero", "hero.png")
+        self.assets.load_image("hero", "./images/hero.png")
 
         self.player = Player(40, 40, self.assets)
 
