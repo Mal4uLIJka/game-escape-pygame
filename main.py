@@ -1286,7 +1286,7 @@ class Game:
             for coin in self.coins:
                 coin.draw(self.screen, True)
 
-        self.menu_manager.draw_text_with_outline(self.screen, f"Очки:{self.score} Время:{self.elapsed_time}",
+        self.menu_manager.draw_text_with_outline(self.screen, f"Очки: {self.score}  Время: {self.elapsed_time}c",
                                                  self.font_small, WHITE,
                                                  (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 12), center_bottom=True)
 
