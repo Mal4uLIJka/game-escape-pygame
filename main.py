@@ -11,6 +11,9 @@ SCREEN_HEIGHT = GRID_HEIGHT * TILE_SIZE
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+GREY = (100, 100, 100)
+RED = (200, 0, 0)
+HOVER_COLOR = (200, 200, 200)
 
 
 class Tile:
@@ -251,7 +254,7 @@ class AnimationController:
         self.anim_speed = anim_speed
 
         self.wobble_timer = 0.0
-        self.wobble_speed = 0.1 * (self.anim_speed/2)
+        self.wobble_speed = 0.1 * (self.anim_speed / 2)
         self.is_moving = False
 
     def update(self):
@@ -342,6 +345,7 @@ class Player:
         self.target_x = None
         self.target_y = None
         self.anim_controller = AnimationController(squash_factor=0.04, tilt_factor=15)
+        self.visible = True
 
         try:
             self.original_image = assets.get_image("hero", scale=(TILE_SIZE, TILE_SIZE))
@@ -425,8 +429,12 @@ class Player:
         self.target_x = None
         self.target_y = None
         self.anim_controller.force_reset_animation()
+        self.visible = True
 
     def draw(self, surface, debug_mode=False):
+        if not self.visible:
+            return
+
         self.anim_controller.draw_animated(surface, self.original_image, self.rect)
         if debug_mode:
             pygame.draw.rect(surface, (0, 0, 255), self.hitbox, 1)
@@ -796,6 +804,176 @@ class LevelLoader:
         )
 
 
+class Button:
+    def __init__(self, x, y, width, height, text, font, callback, subtext_font=None, subtext=None, disabled=False):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        self.font = font
+        self.callback = callback
+        self.subtext = subtext
+        self.subtext_font = subtext_font
+        self.disabled = disabled
+        self.hovered = False
+
+    def check_hover(self, mouse_pos):
+        self.hovered = self.rect.collidepoint(mouse_pos)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.hovered and not self.disabled:
+            self.callback()
+            return True
+        return False
+
+    def draw(self, surface):
+        color = GREY if self.disabled else (HOVER_COLOR if self.hovered else WHITE)
+
+        main_surf = self.font.render(self.text, True, color)
+        main_rect = main_surf.get_rect(center=self.rect.center)
+
+        main_surf_outline = self.font.render(self.text, True, BLACK)
+
+        offset = 2
+        surface.blit(main_surf_outline, (main_rect.x - offset, main_rect.y))
+        surface.blit(main_surf_outline, (main_rect.x + offset, main_rect.y))
+        surface.blit(main_surf_outline, (main_rect.x, main_rect.y - offset))
+        surface.blit(main_surf_outline, (main_rect.x, main_rect.y + offset))
+        surface.blit(main_surf, main_rect)
+
+        if self.subtext:
+            sub_color = GREY if self.disabled else WHITE
+            sub_surf = self.subtext_font.render(self.subtext, True, sub_color)
+            sub_rect = sub_surf.get_rect(centerx=self.rect.centerx, top=self.rect.bottom + 5)
+
+            sub_surf_outline = self.subtext_font.render(self.subtext, True, BLACK)
+
+            surface.blit(sub_surf_outline, (sub_rect.x - offset, sub_rect.y))
+            surface.blit(sub_surf_outline, (sub_rect.x + offset, sub_rect.y))
+            surface.blit(sub_surf_outline, (sub_rect.x, sub_rect.y - offset))
+            surface.blit(sub_surf_outline, (sub_rect.x, sub_rect.y + offset))
+            surface.blit(sub_surf, sub_rect)
+
+
+class MenuManager:
+    def __init__(self, game):
+        self.game = game
+        self.font_small = game.font_small
+        self.font_medium = game.font_medium
+        self.font_large = game.font_large
+        self.overlay_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        self.win_animation_timer = 0
+        self.win_animation_duration = 120
+
+        self.main_menu_buttons = [
+            Button(SCREEN_WIDTH // 2 - 100, 350, 200, 50, "Начать", self.font_medium, self.game.start_game),
+            Button(SCREEN_WIDTH // 2 - 100, 420, 200, 50, "Выйти", self.font_medium, self.game.quit_game)
+        ]
+
+        self.death_menu_buttons = [
+            Button(SCREEN_WIDTH // 2 - 150, 350, 300, 50, "Продолжить с чекпоинта", self.font_medium,
+                   self.game.continue_from_checkpoint, self.font_small, "(-100 Очков, +5c Времени)"),
+            Button(SCREEN_WIDTH // 2 - 150, 440, 300, 50, "Начать с нуля", self.font_medium, self.game.start_game)
+        ]
+
+        self.win_menu_buttons = [
+            Button(SCREEN_WIDTH // 2 - 100, 400, 200, 50, "Начать с нуля", self.font_medium, self.game.start_game),
+            Button(SCREEN_WIDTH // 2 - 100, 470, 200, 50, "Выйти", self.font_medium, self.game.quit_game)
+        ]
+
+    def handle_event(self, event, game_state):
+        button_list = []
+        if game_state == "main_menu":
+            button_list = self.main_menu_buttons
+        elif game_state == "death_screen":
+            button_list = self.death_menu_buttons
+        elif game_state == "win_screen":
+            if self.win_animation_timer >= self.win_animation_duration:
+                button_list = self.win_menu_buttons
+
+        for button in button_list:
+            button.handle_event(event)
+
+    def update(self, mouse_pos, game_state):
+        button_list = []
+        if game_state == "main_menu":
+            button_list = self.main_menu_buttons
+        elif game_state == "death_screen":
+            self.death_menu_buttons[0].disabled = self.game.active_checkpoint_pos is None
+            button_list = self.death_menu_buttons
+        elif game_state == "win_screen":
+            if self.win_animation_timer < self.win_animation_duration:
+                self.win_animation_timer += 1
+                if self.win_animation_timer > 60:
+                    self.game.player.visible = False
+            else:
+                button_list = self.win_menu_buttons
+
+        for button in button_list:
+            button.check_hover(mouse_pos)
+
+    def draw(self, surface, game_state):
+        if game_state == "main_menu":
+            self.draw_main_menu(surface)
+        elif game_state == "death_screen":
+            self.draw_death_screen(surface)
+        elif game_state == "win_screen":
+            self.draw_win_screen(surface)
+
+    def draw_main_menu(self, surface):
+        surface.fill(BLACK)
+        self.draw_text_with_outline(surface, "Игра-побег", self.font_large, WHITE, (SCREEN_WIDTH // 2, 200))
+        for button in self.main_menu_buttons:
+            button.draw(surface)
+
+    def draw_death_screen(self, surface):
+        self.game.in_game_draw()
+
+        self.overlay_surface.fill((0, 0, 0, 180))
+        surface.blit(self.overlay_surface, (0, 0))
+
+        self.draw_text_with_outline(surface, "Вы умерли", self.font_large, RED, (SCREEN_WIDTH // 2, 200))
+
+        self.draw_text_with_outline(surface, self.get_stats_text(), self.font_medium, WHITE, (SCREEN_WIDTH // 2, 280))
+
+        for button in self.death_menu_buttons:
+            button.draw(surface)
+
+    def draw_win_screen(self, surface):
+        self.game.in_game_draw()
+
+        alpha = min(200, int(200 * (self.win_animation_timer / self.win_animation_duration)))
+        self.overlay_surface.fill((0, 0, 0, alpha))
+        surface.blit(self.overlay_surface, (0, 0))
+
+        if self.win_animation_timer >= self.win_animation_duration:
+            self.draw_text_with_outline(surface, "Вы сбежали!", self.font_large, WHITE, (SCREEN_WIDTH // 2, 200))
+
+            self.draw_text_with_outline(surface, self.get_stats_text(), self.font_medium, WHITE, (SCREEN_WIDTH // 2, 280))
+
+            for button in self.win_menu_buttons:
+                button.draw(surface)
+
+    def get_stats_text(self):
+        score_str = f"Очки: {self.game.score} Время: {self.game.elapsed_time}c"
+        return score_str
+
+    def draw_text_with_outline(self, surface, text, font, color, center_pos, center_bottom=False):
+        main_surf = font.render(text, True, color)
+        outline_surf = font.render(text, True, BLACK)
+
+        if center_bottom:
+            main_rect = main_surf.get_rect(centerx=center_pos[0], bottom=center_pos[1])
+        else:
+            main_rect = main_surf.get_rect(center=center_pos)
+
+        offset = 2
+        surface.blit(outline_surf, (main_rect.x - offset, main_rect.y))
+        surface.blit(outline_surf, (main_rect.x + offset, main_rect.y))
+        surface.blit(outline_surf, (main_rect.x, main_rect.y - offset))
+        surface.blit(outline_surf, (main_rect.x, main_rect.y + offset))
+
+        surface.blit(main_surf, main_rect)
+
+
 class Game:
     def __init__(self):
         pygame.mixer.pre_init(44100, -16, 2, 512)
@@ -804,26 +982,35 @@ class Game:
         pygame.mixer.set_num_channels(32)
 
         pygame.font.init()
+        font_path = "./fonts/DigitalSemi-SerifPixel-Regular.otf"
         try:
-            self.ui_font = pygame.font.Font("./fonts/DigitalSemi-SerifPixel-Regular.otf", 12)
+            self.font_small = pygame.font.Font(font_path, 12)
+            self.font_medium = pygame.font.Font(font_path, 34)
+            self.font_large = pygame.font.Font(font_path, 64)
         except FileNotFoundError:
             print("UI Font not found, using default.")
-            self.ui_font = pygame.font.Font(None, 12)
+            self.font_small = pygame.font.Font(None, 24)
+            self.font_medium = pygame.font.Font(None, 48)
+            self.font_large = pygame.font.Font(None, 72)
 
         self.score = 0
-        self.time = pygame.time.get_ticks()
-        self.clock = pygame.time.Clock()
+        self.start_time = 0
+        self.time_penalty = 0
         self.elapsed_time = 0
+        self.clock = pygame.time.Clock()
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Побег из 2 общежития")
+        pygame.display.set_caption("Игра-побег")
 
         self.running = True
         self.debug_mode = False
+        self.game_state = "main_menu"
 
         self.level_loader = LevelLoader('levels.json')
         self.level_names = list(self.level_loader.levels_data.keys())
-        self.current_level_index = 3
+        self.current_level_index = 0
+
+        self.collected_coins_by_level = {}
 
         self.walls = []
         self.enemies = []
@@ -851,6 +1038,35 @@ class Game:
         self.assets.load_sound("reverse", "./sounds/click.wav")
 
         self.player = Player(40, 40, self.assets)
+        self.menu_manager = MenuManager(self)
+
+    def reset_game(self):
+        self.score = 0
+        self.start_time = pygame.time.get_ticks()
+        self.time_penalty = 0
+        self.elapsed_time = 0
+        self.current_level_index = 0
+        self.active_checkpoint_pos = None
+        self.menu_manager.win_animation_timer = 0
+        self.player.visible = True
+        self.player.pressed_keys.clear()
+        self.collected_coins_by_level = {}
+
+    def start_game(self):
+        self.reset_game()
+        self.load_current_level()
+        self.game_state = "in_game"
+
+    def quit_game(self):
+        self.running = False
+
+    def continue_from_checkpoint(self):
+        self.score = max(0, self.score - 100)
+        self.time_penalty += 5
+        self.player.visible = True
+        self.player.pressed_keys.clear()
+        self.load_current_level()
+        self.game_state = "in_game"
 
     def load_current_level(self):
         self.transforming_reverse_tiles.clear()
@@ -862,6 +1078,9 @@ class Game:
              self.current_background, self.death_tiles, self.slow_tiles,
              self.reverse_tiles, self.coins, self.checkpoint_tiles) = self.level_loader.load_level(level_name,
                                                                                                    self.assets)
+
+            level_collected_coins = self.collected_coins_by_level.get(self.current_level_index, set())
+            self.coins = [coin for coin in self.coins if coin.rect.topleft not in level_collected_coins]
 
             if self.player_spawn:
                 self.player.start_pos = self.player_spawn
@@ -878,38 +1097,57 @@ class Game:
 
             return True
         else:
-            print("Поздравляю! Вы прошли все уровни!")
+            self.game_state = "win_screen"
             return False
 
     def run(self):
-        if not self.load_current_level():
-            return
-
-        self.active_checkpoint_pos = None
-
         while self.running:
-            self.events()
-            self.update()
+            mouse_pos = pygame.mouse.get_pos()
+
+            self.events(mouse_pos)
+            self.update(mouse_pos)
             self.draw()
+
             self.clock.tick(120)
 
         pygame.quit()
 
-    def events(self):
+    def events(self, mouse_pos):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_v:
-                    self.debug_mode = not self.debug_mode
-                if event.key in [pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN]:
-                    self.player.pressed_keys.add(event.key)
-            if event.type == pygame.KEYUP:
-                if event.key in self.player.pressed_keys:
-                    self.player.pressed_keys.remove(event.key)
 
-    def update(self):
-        self.elapsed_time = (pygame.time.get_ticks() - self.time) // 1000
+            if self.game_state == "in_game":
+                self.in_game_events(event)
+            else:
+                self.menu_manager.handle_event(event, self.game_state)
+
+    def update(self, mouse_pos):
+        if self.game_state == "in_game":
+            self.in_game_update(mouse_pos)
+        else:
+            self.menu_manager.update(mouse_pos, self.game_state)
+
+    def draw(self):
+        if self.game_state == "in_game":
+            self.in_game_draw()
+        else:
+            self.menu_manager.draw(self.screen, self.game_state)
+
+        pygame.display.flip()
+
+    def in_game_events(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_v:
+                self.debug_mode = not self.debug_mode
+            if event.key in [pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN]:
+                self.player.pressed_keys.add(event.key)
+        if event.type == pygame.KEYUP:
+            if event.key in self.player.pressed_keys:
+                self.player.pressed_keys.remove(event.key)
+
+    def in_game_update(self, mouse_pos):
+        self.elapsed_time = (pygame.time.get_ticks() - self.start_time) // 1000 + self.time_penalty
 
         if not self.player.is_moving:
             direction_to_move = None
@@ -950,6 +1188,16 @@ class Game:
             if tile in self.transforming_reverse_tiles: self.transforming_reverse_tiles.remove(tile)
             if tile in self.reverse_tiles: self.reverse_tiles.remove(tile)
 
+        slow_tile_found = None
+        for tile in self.slow_tiles:
+            if self.player.hitbox.colliderect(tile.rect):
+                slow_tile_found = tile
+                break
+        if slow_tile_found:
+            self.player.speed = self.player.base_speed / slow_tile_found.speed
+        else:
+            self.player.speed = self.player.base_speed
+
         self.player.update()
 
         for checkpoint in self.checkpoint_tiles:
@@ -982,16 +1230,6 @@ class Game:
         for enemy in self.enemies:
             enemy.update(self.walls)
 
-        slow_tile_found = None
-        for tile in self.slow_tiles:
-            if self.player.hitbox.colliderect(tile.rect):
-                slow_tile_found = tile
-                break
-        if slow_tile_found:
-            self.player.speed = self.player.base_speed / slow_tile_found.speed
-        else:
-            self.player.speed = self.player.base_speed
-
         for door in self.doors:
             if self.player.hitbox.colliderect(door.rect):
                 sound = self.assets.get_sound("next_level")
@@ -1001,8 +1239,7 @@ class Game:
                     channel.play(sound)
                 self.current_level_index += 1
                 self.active_checkpoint_pos = None
-                running = self.load_current_level()
-                if not running:
+                if not self.load_current_level():
                     break
 
         if player_needs_reset:
@@ -1011,25 +1248,13 @@ class Game:
                 sound.set_volume(0.4)
                 channel = pygame.mixer.find_channel(True)
                 channel.play(sound)
-
-            saved_checkpoint_pos = self.active_checkpoint_pos
-
-            self.load_current_level()
-
-            if saved_checkpoint_pos:
-                self.player.start_pos = saved_checkpoint_pos
-                self.active_checkpoint_pos = saved_checkpoint_pos
-                self.player.reset()
-
-                for cp in self.checkpoint_tiles:
-                    if cp.rect.topleft == saved_checkpoint_pos:
-                        cp.activate()
-                        break
+            self.game_state = "death_screen"
 
         for coin in self.coins:
             if self.player.hitbox.colliderect(coin.hitbox) and not coin.is_collecting:
                 coin.is_collecting = True
                 self.score += coin.value
+                self.collected_coins_by_level.setdefault(self.current_level_index, set()).add(coin.rect.topleft)
                 sound = self.assets.get_sound("coin")
                 if sound:
                     sound.set_volume(0.4)
@@ -1038,7 +1263,7 @@ class Game:
             coin.update()
         self.coins = [coin for coin in self.coins if coin.alpha > 0]
 
-    def draw(self):
+    def in_game_draw(self):
         if self.current_background:
             self.screen.blit(self.current_background, (0, 0))
 
@@ -1055,30 +1280,15 @@ class Game:
         if self.debug_mode:
             for tile in self.walls + self.slow_tiles + self.death_tiles + self.reverse_tiles + self.transforming_reverse_tiles + self.checkpoint_tiles:
                 tile.debug_draw(self.screen)
-
             for enemy in self.enemies:
                 enemy.draw(self.screen, True)
-
             self.player.draw(self.screen, True)
-
             for coin in self.coins:
                 coin.draw(self.screen, True)
 
-        score_str = f"Очки:{self.score} Время:{self.elapsed_time}"
-        score_surf_main = self.ui_font.render(score_str, True, WHITE)
-        score_rect = score_surf_main.get_rect(centerx=SCREEN_WIDTH // 2, bottom=SCREEN_HEIGHT - 12)
-        score_surf_outline = self.ui_font.render(score_str, True, BLACK)
-
-        offset = 2
-
-        self.screen.blit(score_surf_outline, (score_rect.x - offset, score_rect.y))
-        self.screen.blit(score_surf_outline, (score_rect.x + offset, score_rect.y))
-        self.screen.blit(score_surf_outline, (score_rect.x, score_rect.y - offset))
-        self.screen.blit(score_surf_outline, (score_rect.x, score_rect.y + offset))
-
-        self.screen.blit(score_surf_main, score_rect)
-
-        pygame.display.flip()
+        self.menu_manager.draw_text_with_outline(self.screen, f"Очки:{self.score} Время:{self.elapsed_time}",
+                                                 self.font_small, WHITE,
+                                                 (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 12), center_bottom=True)
 
 
 if __name__ == '__main__':
