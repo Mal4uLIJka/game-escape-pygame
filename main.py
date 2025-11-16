@@ -254,20 +254,20 @@ class AnimationController:
         self.anim_speed = anim_speed
 
         self.wobble_timer = 0.0
-        self.wobble_speed = 0.1 * (self.anim_speed / 2)
         self.is_moving = False
 
-    def update(self):
-        lerp_factor = 0.7
-        self.scale_x += (self.target_scale_x - self.scale_x) * lerp_factor
-        self.scale_y += (self.target_scale_y - self.scale_y) * lerp_factor
+    def update(self, dt):
+        lerp_strength = 20
+        self.scale_x += (self.target_scale_x - self.scale_x) * lerp_strength * dt
+        self.scale_y += (self.target_scale_y - self.scale_y) * lerp_strength * dt
 
         if self.is_moving:
-            self.wobble_timer += self.wobble_speed
+            wobble_speed_per_second = 6 * self.anim_speed
+            self.wobble_timer += wobble_speed_per_second * dt
             self.current_tilt = self.target_tilt * math.sin(self.wobble_timer)
         else:
             self.wobble_timer = 0.0
-            self.current_tilt += (0.0 - self.current_tilt) * 0.2
+            self.current_tilt += (0.0 - self.current_tilt) * 10 * dt
 
     def set_squash_stretch(self, direction):
         squash = self.squash_factor * random.uniform(0.9, 1.1)
@@ -329,7 +329,7 @@ class AnimationController:
 
 
 class Player:
-    def __init__(self, x, y, assets, base_speed=5):
+    def __init__(self, x, y, assets, base_speed=600):
         self.start_pos = (x, y)
         self.x = float(x)
         self.y = float(y)
@@ -340,7 +340,8 @@ class Player:
         self.speed = float(base_speed)
         self.direction = None
         self.is_moving = False
-        self.pressed_keys = set()
+        self.held_keys = set()
+        self.next_direction = None
         self.reverse_tiles_underneath = []
         self.target_x = None
         self.target_y = None
@@ -393,25 +394,30 @@ class Player:
         self.anim_controller.set_squash_stretch(direction)
         self.anim_controller.set_tilt(direction)
 
-    def update(self):
-        self.anim_controller.update()
+    def update(self, dt):
+        self.anim_controller.update(dt)
 
         if not self.is_moving:
             self.anim_controller.reset_animation()
 
         if not self.is_moving:
             return
+
+        move_distance = self.speed * dt
+
         if self.direction == "left":
-            self.x = max(self.target_x, self.x - self.speed)
+            self.x = max(self.target_x, self.x - move_distance)
         elif self.direction == "right":
-            self.x = min(self.target_x, self.x + self.speed)
+            self.x = min(self.target_x, self.x + move_distance)
         elif self.direction == "up":
-            self.y = max(self.target_y, self.y - self.speed)
+            self.y = max(self.target_y, self.y - move_distance)
         elif self.direction == "down":
-            self.y = min(self.target_y, self.y + self.speed)
+            self.y = min(self.target_y, self.y + move_distance)
+
         self.rect.x = int(round(self.x))
         self.rect.y = int(round(self.y))
         self.hitbox.center = self.rect.center
+
         if self.rect.x == self.target_x and self.rect.y == self.target_y:
             self.x = float(self.target_x)
             self.y = float(self.target_y)
@@ -430,6 +436,8 @@ class Player:
         self.target_y = None
         self.anim_controller.force_reset_animation()
         self.visible = True
+        self.held_keys.clear()
+        self.next_direction = None
 
     def draw(self, surface, debug_mode=False):
         if not self.visible:
@@ -442,7 +450,7 @@ class Player:
 
 
 class Enemy:
-    def __init__(self, x, y, move_type, assets, speed=2, hitx=-5, hity=-5):
+    def __init__(self, x, y, move_type, assets, speed=240, hitx=-5, hity=-5):
         self.start_pos = (x, y)
         self.x = float(x)
         self.y = float(y)
@@ -452,8 +460,8 @@ class Enemy:
         self.move_type = move_type
         self.speed = float(speed)
         self.direction = 1
-        self.color = (255, 0, 0) if speed > 2 else (180, 50, 50)
-        self.anim_controller = AnimationController(squash_factor=0.02, tilt_factor=5, anim_speed=speed)
+        self.color = (255, 0, 0) if speed > 240 else (180, 50, 50)
+        self.anim_controller = AnimationController(squash_factor=0.02, tilt_factor=5, anim_speed=speed / 120)
 
         self.is_paused = False
         self.pause_timer = 0
@@ -461,9 +469,9 @@ class Enemy:
 
         self.original_image = None
         texture_name = ""
-        if speed == 2:
+        if speed == 240:
             texture_name = "enemy_slow"
-        elif speed == 4:
+        elif speed == 480:
             texture_name = "enemy_fast"
 
         if texture_name and assets:
@@ -485,7 +493,7 @@ class Enemy:
         self.is_paused = False
         self.pause_timer = 0
 
-    def update(self, walls):
+    def update(self, walls, dt):
         if self.is_paused:
             self.pause_timer -= 1
             if self.pause_timer <= 0:
@@ -493,7 +501,7 @@ class Enemy:
                 self.direction *= -1
 
             self.anim_controller.reset_animation()
-            self.anim_controller.update()
+            self.anim_controller.update(dt)
             return
 
         move_direction = None
@@ -507,10 +515,13 @@ class Enemy:
             self.anim_controller.set_tilt(move_direction)
 
         old_x, old_y = self.x, self.y
+        move_distance = self.speed * self.direction * dt
+
         if self.move_type == 'horizontal':
-            self.x += self.speed * self.direction
+            self.x += move_distance
         elif self.move_type == 'vertical':
-            self.y += self.speed * self.direction
+            self.y += move_distance
+
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
         self.hitbox.center = self.rect.center
@@ -525,7 +536,7 @@ class Enemy:
                 self.pause_timer = self.pause_duration
                 break
 
-        self.anim_controller.update()
+        self.anim_controller.update(dt)
 
     def draw(self, surface, debug_mode=False):
         self.anim_controller.draw_animated(surface, self.original_image, self.rect)
@@ -541,7 +552,7 @@ def is_line_of_sight_clear(start_pos, end_pos, walls):
 
 
 class SuperEnemy(Enemy):
-    def __init__(self, x, y, move_type, assets, speed=2, hitx=-5, hity=-5):
+    def __init__(self, x, y, move_type, assets, speed=240, hitx=-5, hity=-5):
         super().__init__(x, y, move_type, assets, speed, hitx, hity)
         self.color = (139, 0, 0)
         self.direction_look = 'right' if self.move_type == 'horizontal' else 'down'
@@ -563,7 +574,7 @@ class SuperEnemy(Enemy):
             self.original_image = pygame.Surface((TILE_SIZE, TILE_SIZE))
             self.original_image.fill(self.color)
 
-    def update(self, walls):
+    def update(self, walls, dt):
         if self.is_paused:
             self.pause_timer -= 1
             if self.pause_timer <= 0:
@@ -575,7 +586,7 @@ class SuperEnemy(Enemy):
                     self.direction_look = 'up' if self.direction == -1 else 'down'
 
             self.anim_controller.reset_animation()
-            self.anim_controller.update()
+            self.anim_controller.update(dt)
             return
 
         move_direction = None
@@ -589,10 +600,12 @@ class SuperEnemy(Enemy):
             self.anim_controller.set_tilt(move_direction)
 
         old_x, old_y = self.x, self.y
+        move_distance = self.speed * self.direction * dt
+
         if self.move_type == 'horizontal':
-            self.x += self.speed * self.direction
+            self.x += move_distance
         elif self.move_type == 'vertical':
-            self.y += self.speed * self.direction
+            self.y += move_distance
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
         self.hitbox.center = self.rect.center
@@ -607,7 +620,7 @@ class SuperEnemy(Enemy):
                 self.pause_timer = self.pause_duration
                 break
 
-        self.anim_controller.update()
+        self.anim_controller.update(dt)
 
     def _cast_ray(self, start_pos, angle_rad, length, walls):
         end_x = start_pos[0] + math.cos(angle_rad) * length
@@ -729,20 +742,20 @@ class LevelLoader:
             "#": lambda x, y: Wall(x, y),
             " ": None,
             "P": "player",
-            "h": lambda x, y, assets: Enemy(x, y, 'horizontal', assets, speed=2),
-            "v": lambda x, y, assets: Enemy(x, y, 'vertical', assets, speed=2),
-            "f": lambda x, y, assets: Enemy(x, y, 'horizontal', assets, speed=4),
-            "l": lambda x, y, assets: Enemy(x, y, 'vertical', assets, speed=4),
+            "h": lambda x, y, assets: Enemy(x, y, 'horizontal', assets, speed=240),
+            "v": lambda x, y, assets: Enemy(x, y, 'vertical', assets, speed=240),
+            "f": lambda x, y, assets: Enemy(x, y, 'horizontal', assets, speed=480),
+            "l": lambda x, y, assets: Enemy(x, y, 'vertical', assets, speed=480),
             "D": lambda x, y: Door(x, y),
-            "s": lambda x, y: Slow(x, y),
-            "S": lambda x, y: Slow(x, y, 20),
+            "s": lambda x, y: Slow(x, y, speed=2),
+            "S": lambda x, y: Slow(x, y, speed=20),
             "X": lambda x, y: Death(x, y),
             "$": lambda x, y: Coin(x, y),
             "@": lambda x, y: Reverse(x, y),
-            "H": lambda x, y, assets: SuperEnemy(x, y, 'horizontal', assets, speed=2),
-            "V": lambda x, y, assets: SuperEnemy(x, y, 'vertical', assets, speed=2),
-            "F": lambda x, y, assets: SuperEnemy(x, y, 'horizontal', assets, speed=4),
-            "L": lambda x, y, assets: SuperEnemy(x, y, 'vertical', assets, speed=4),
+            "H": lambda x, y, assets: SuperEnemy(x, y, 'horizontal', assets, speed=240),
+            "V": lambda x, y, assets: SuperEnemy(x, y, 'vertical', assets, speed=240),
+            "F": lambda x, y, assets: SuperEnemy(x, y, 'horizontal', assets, speed=480),
+            "L": lambda x, y, assets: SuperEnemy(x, y, 'vertical', assets, speed=480),
             "C": lambda x, y: Checkpoint(x, y)
         }
         self.class_map = {
@@ -753,10 +766,22 @@ class LevelLoader:
         with open(self.file_path, 'r') as f:
             return json.load(f)
 
-    def load_level(self, level_name, assets):
+    def load_level(self, level_name, assets, is_menu_load=False):
         level_data = self.levels_data.get(level_name)
         if not level_data:
             raise ValueError(f"Уровень '{level_name}' не найден в JSON.")
+
+        current_background = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        current_background.fill(pygame.Color('darkgrey'))
+        try:
+            background_image = pygame.image.load(level_data["background"]).convert()
+            current_background = pygame.transform.scale(background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        except pygame.error:
+            print(f"Фон '{level_data['background']}' не найден. Используется серый цвет.")
+
+        if is_menu_load:
+            return current_background
+
         for obj_list in self.class_map.values():
             obj_list.clear()
         player_spawn = None
@@ -780,15 +805,6 @@ class LevelLoader:
                         if isinstance(obj, cls):
                             obj_list.append(obj)
                             break
-
-        current_background = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        current_background.fill(pygame.Color('darkgrey'))
-
-        try:
-            background_image = pygame.image.load(level_data["background"]).convert()
-            current_background = pygame.transform.scale(background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
-        except pygame.error:
-            print(f"Фон '{level_data['background']}' не найден. Используется серый цвет.")
 
         return (
             self.class_map[Wall],
@@ -919,7 +935,7 @@ class MenuManager:
             self.draw_win_screen(surface)
 
     def draw_main_menu(self, surface):
-        surface.fill(BLACK)
+        surface.blit(self.game.main_menu_bg_dimmed, (0, 0))
         self.draw_text_with_outline(surface, "Игра-побег", self.font_large, WHITE, (SCREEN_WIDTH // 2, 200))
         for button in self.main_menu_buttons:
             button.draw(surface)
@@ -937,6 +953,10 @@ class MenuManager:
         for button in self.death_menu_buttons:
             button.draw(surface)
 
+        self.draw_text_with_outline(surface, f"Очки: {self.game.score}  Время: {self.game.elapsed_time}c",
+                                    self.font_small, WHITE,
+                                    (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 12), center_bottom=True)
+
     def draw_win_screen(self, surface):
         self.game.in_game_draw()
 
@@ -947,10 +967,15 @@ class MenuManager:
         if self.win_animation_timer >= self.win_animation_duration:
             self.draw_text_with_outline(surface, "Вы сбежали!", self.font_large, WHITE, (SCREEN_WIDTH // 2, 200))
 
-            self.draw_text_with_outline(surface, self.get_stats_text(), self.font_medium, WHITE, (SCREEN_WIDTH // 2, 280))
+            self.draw_text_with_outline(surface, self.get_stats_text(), self.font_medium, WHITE,
+                                        (SCREEN_WIDTH // 2, 280))
 
             for button in self.win_menu_buttons:
                 button.draw(surface)
+
+        self.draw_text_with_outline(surface, f"Очки: {self.game.score}  Время: {self.game.elapsed_time}c",
+                                    self.font_small, WHITE,
+                                    (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 12), center_bottom=True)
 
     def get_stats_text(self):
         score_str = f"Очки: {self.game.score} Время: {self.game.elapsed_time}c"
@@ -999,6 +1024,8 @@ class Game:
         self.elapsed_time = 0
         self.clock = pygame.time.Clock()
 
+        self.debug_start_level = 0
+
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Игра-побег")
 
@@ -1018,6 +1045,8 @@ class Game:
         self.player_spawn = None
         self.active_checkpoint_pos = None
         self.current_background = None
+        self.main_menu_bg = None
+        self.main_menu_bg_dimmed = None
         self.death_tiles = []
         self.slow_tiles = []
         self.reverse_tiles = []
@@ -1036,26 +1065,50 @@ class Game:
         self.assets.load_sound("coin", "./sounds/pickupCoin.wav")
         self.assets.load_sound("next_level", "./sounds/nextLevel.wav")
         self.assets.load_sound("reverse", "./sounds/click.wav")
+        self.assets.load_sound("spawn", "./sounds/spawn.wav")
+        self.assets.load_sound("finish", "./sounds/finish.wav")
 
         self.player = Player(40, 40, self.assets)
         self.menu_manager = MenuManager(self)
+
+        self.preload_menu_background()
+
+    def preload_menu_background(self):
+        if self.level_names:
+            level_name = self.level_names[0]
+            self.main_menu_bg = self.level_loader.load_level(level_name, self.assets, is_menu_load=True)
+            self.main_menu_bg_dimmed = self.main_menu_bg.copy()
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 180))
+            self.main_menu_bg_dimmed.blit(overlay, (0, 0))
+        else:
+            self.main_menu_bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            self.main_menu_bg.fill(BLACK)
+            self.main_menu_bg_dimmed = self.main_menu_bg.copy()
 
     def reset_game(self):
         self.score = 0
         self.start_time = pygame.time.get_ticks()
         self.time_penalty = 0
         self.elapsed_time = 0
-        self.current_level_index = 0
+        self.current_level_index = self.debug_start_level
         self.active_checkpoint_pos = None
         self.menu_manager.win_animation_timer = 0
         self.player.visible = True
-        self.player.pressed_keys.clear()
+        self.player.held_keys.clear()
+        self.player.next_direction = None
         self.collected_coins_by_level = {}
 
     def start_game(self):
         self.reset_game()
         self.load_current_level()
         self.game_state = "in_game"
+
+        sound = self.assets.get_sound("spawn")
+        if sound:
+            sound.set_volume(0.4)
+            channel = pygame.mixer.find_channel(True)
+            channel.play(sound)
 
     def quit_game(self):
         self.running = False
@@ -1064,7 +1117,8 @@ class Game:
         self.score = max(0, self.score - 100)
         self.time_penalty += 5
         self.player.visible = True
-        self.player.pressed_keys.clear()
+        self.player.held_keys.clear()
+        self.player.next_direction = None
         self.load_current_level()
         self.game_state = "in_game"
 
@@ -1085,6 +1139,9 @@ class Game:
             if self.player_spawn:
                 self.player.start_pos = self.player_spawn
 
+            if self.current_level_index > 0 and self.player_spawn:
+                self.active_checkpoint_pos = self.player_spawn
+
             self.player.reset()
 
             if self.active_checkpoint_pos:
@@ -1098,17 +1155,21 @@ class Game:
             return True
         else:
             self.game_state = "win_screen"
+            sound = self.assets.get_sound("finish")
+            if sound:
+                sound.set_volume(0.4)
+                channel = pygame.mixer.find_channel(True)
+                channel.play(sound)
             return False
 
     def run(self):
         while self.running:
+            dt = self.clock.tick(120) / 1000.0
             mouse_pos = pygame.mouse.get_pos()
 
             self.events(mouse_pos)
-            self.update(mouse_pos)
+            self.update(mouse_pos, dt)
             self.draw()
-
-            self.clock.tick(120)
 
         pygame.quit()
 
@@ -1122,9 +1183,9 @@ class Game:
             else:
                 self.menu_manager.handle_event(event, self.game_state)
 
-    def update(self, mouse_pos):
+    def update(self, mouse_pos, dt):
         if self.game_state == "in_game":
-            self.in_game_update(mouse_pos)
+            self.in_game_update(mouse_pos, dt)
         else:
             self.menu_manager.update(mouse_pos, self.game_state)
 
@@ -1134,33 +1195,64 @@ class Game:
         else:
             self.menu_manager.draw(self.screen, self.game_state)
 
+        if self.game_state == "in_game":
+            self.menu_manager.draw_text_with_outline(self.screen, f"Очки: {self.score}  Время: {self.elapsed_time}c",
+                                                     self.font_small, WHITE,
+                                                     (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 12), center_bottom=True)
+
         pygame.display.flip()
 
     def in_game_events(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_v:
                 self.debug_mode = not self.debug_mode
-            if event.key in [pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN]:
-                self.player.pressed_keys.add(event.key)
-        if event.type == pygame.KEYUP:
-            if event.key in self.player.pressed_keys:
-                self.player.pressed_keys.remove(event.key)
 
-    def in_game_update(self, mouse_pos):
+            direction = None
+            if event.key == pygame.K_LEFT:
+                direction = "left"
+            elif event.key == pygame.K_RIGHT:
+                direction = "right"
+            elif event.key == pygame.K_UP:
+                direction = "up"
+            elif event.key == pygame.K_DOWN:
+                direction = "down"
+
+            if direction:
+                self.player.held_keys.add(event.key)
+                if self.player.is_moving:
+                    self.player.next_direction = direction
+                else:
+                    self.player.start_move(direction, self.walls, self.transforming_reverse_tiles)
+
+        if event.type == pygame.KEYUP:
+            if event.key in self.player.held_keys:
+                self.player.held_keys.remove(event.key)
+
+            direction = None
+            if event.key == pygame.K_LEFT:
+                direction = "left"
+            elif event.key == pygame.K_RIGHT:
+                direction = "right"
+            elif event.key == pygame.K_UP:
+                direction = "up"
+            elif event.key == pygame.K_DOWN:
+                direction = "down"
+
+            if direction and self.player.next_direction == direction:
+                self.player.next_direction = None
+
+    def in_game_update(self, mouse_pos, dt):
         self.elapsed_time = (pygame.time.get_ticks() - self.start_time) // 1000 + self.time_penalty
 
-        if not self.player.is_moving:
-            direction_to_move = None
-            if pygame.K_UP in self.player.pressed_keys:
-                direction_to_move = "up"
-            elif pygame.K_DOWN in self.player.pressed_keys:
-                direction_to_move = "down"
-            elif pygame.K_LEFT in self.player.pressed_keys:
-                direction_to_move = "left"
-            elif pygame.K_RIGHT in self.player.pressed_keys:
-                direction_to_move = "right"
-            if direction_to_move:
-                self.player.start_move(direction_to_move, self.walls, self.transforming_reverse_tiles)
+        slow_tile_found = None
+        for tile in self.slow_tiles:
+            if self.player.hitbox.colliderect(tile.rect):
+                slow_tile_found = tile
+                break
+        if slow_tile_found:
+            self.player.speed = self.player.base_speed / slow_tile_found.speed
+        else:
+            self.player.speed = self.player.base_speed
 
         current_reverse_tiles = []
         for path in self.reverse_tiles:
@@ -1188,17 +1280,25 @@ class Game:
             if tile in self.transforming_reverse_tiles: self.transforming_reverse_tiles.remove(tile)
             if tile in self.reverse_tiles: self.reverse_tiles.remove(tile)
 
-        slow_tile_found = None
-        for tile in self.slow_tiles:
-            if self.player.hitbox.colliderect(tile.rect):
-                slow_tile_found = tile
-                break
-        if slow_tile_found:
-            self.player.speed = self.player.base_speed / slow_tile_found.speed
-        else:
-            self.player.speed = self.player.base_speed
+        self.player.update(dt)
 
-        self.player.update()
+        if not self.player.is_moving:
+            direction_to_move = None
+            if self.player.next_direction:
+                direction_to_move = self.player.next_direction
+                self.player.next_direction = None
+            else:
+                if pygame.K_UP in self.player.held_keys:
+                    direction_to_move = "up"
+                elif pygame.K_DOWN in self.player.held_keys:
+                    direction_to_move = "down"
+                elif pygame.K_LEFT in self.player.held_keys:
+                    direction_to_move = "left"
+                elif pygame.K_RIGHT in self.player.held_keys:
+                    direction_to_move = "right"
+
+            if direction_to_move:
+                self.player.start_move(direction_to_move, self.walls, self.transforming_reverse_tiles)
 
         for checkpoint in self.checkpoint_tiles:
             if self.player.hitbox.colliderect(checkpoint.rect) and not checkpoint.is_active:
@@ -1228,7 +1328,7 @@ class Game:
                     break
 
         for enemy in self.enemies:
-            enemy.update(self.walls)
+            enemy.update(self.walls, dt)
 
         for door in self.doors:
             if self.player.hitbox.colliderect(door.rect):
@@ -1285,10 +1385,6 @@ class Game:
             self.player.draw(self.screen, True)
             for coin in self.coins:
                 coin.draw(self.screen, True)
-
-        self.menu_manager.draw_text_with_outline(self.screen, f"Очки: {self.score}  Время: {self.elapsed_time}c",
-                                                 self.font_small, WHITE,
-                                                 (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 12), center_bottom=True)
 
 
 if __name__ == '__main__':
