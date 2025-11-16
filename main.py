@@ -15,6 +15,18 @@ GREY = (100, 100, 100)
 RED = (200, 0, 0)
 HOVER_COLOR = (200, 200, 200)
 
+def load_tile_image(path, size=(TILE_SIZE, TILE_SIZE)):
+    """
+    Загружает и масштабирует изображение, обрабатывая ошибки.
+    """
+    if not path:
+        return None
+    try:
+        image = pygame.image.load(path).convert_alpha()
+        return pygame.transform.scale(image, size)
+    except pygame.error:
+        print(f"Текстура '{path}' не найдена.")
+        return None
 
 class Tile:
     def __init__(self, x, y):
@@ -25,29 +37,27 @@ class Tile:
         s.fill((0, 0, 0, 0))
         surface.blit(s, self.rect.topleft)
 
+    def debug_draw(self, surface, color=(255, 0, 0, 128)):
+        """
+        Универсальный метод для отрисовки отладочного прямоугольника.
+        """
+        s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+        s.fill(color)
+        surface.blit(s, self.rect.topleft)
 
 class Wall(Tile):
     def __init__(self, x, y, texture=None):
         super().__init__(x, y)
         self.texture = texture
-        self.image = None
+        self.image = load_tile_image(self.texture)
         self.was_reverse = False
-        if self.texture:
-            try:
-                self.image = pygame.image.load(self.texture).convert_alpha()
-                self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
-            except pygame.error:
-                print(f"Текстура '{self.texture}' не найдена.")
 
     def draw(self, surface):
         if self.image:
             surface.blit(self.image, self.rect.topleft)
 
     def debug_draw(self, surface):
-        s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-        s.fill((255, 0, 0, 128))
-        surface.blit(s, self.rect.topleft)
-
+        super().debug_draw(surface)
 
 class Door(Tile):
     def __init__(self, x, y):
@@ -63,27 +73,23 @@ class Slow(Tile):
     def __init__(self, x, y, speed=2):
         super().__init__(x, y)
         self.speed = speed
-        self.s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-        self.s.fill((0, 255, 0, 128))
 
     def draw(self, surface):
         pass
 
     def debug_draw(self, surface):
-        surface.blit(self.s, self.rect.topleft)
+        super().debug_draw(surface, color=(0, 255, 0, 128))
 
 
 class Death(Tile):
     def __init__(self, x, y):
         super().__init__(x, y)
-        self.s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-        self.s.fill((0, 0, 255, 128))
 
     def draw(self, surface):
         pass
 
     def debug_draw(self, surface):
-        surface.blit(self.s, self.rect.topleft)
+        super().debug_draw(surface, color=(0, 0, 255, 128))
 
 
 class Reverse(Tile):
@@ -99,16 +105,8 @@ class Reverse(Tile):
 
         self.wall_image, self.base_image = None, None
 
-        try:
-            self.wall_image = pygame.image.load(self.wall_texture).convert_alpha()
-            self.wall_image = pygame.transform.scale(self.wall_image, (TILE_SIZE, TILE_SIZE))
-        except pygame.error:
-            pass
-        try:
-            self.base_image = pygame.image.load(self.base_texture).convert_alpha()
-            self.base_image = pygame.transform.scale(self.base_image, (TILE_SIZE, TILE_SIZE))
-        except pygame.error:
-            pass
+        self.wall_image = load_tile_image(self.wall_texture)
+        self.base_image = load_tile_image(self.base_texture)
 
     def start_transformation(self):
         self.is_transforming = True
@@ -148,12 +146,8 @@ class Reverse(Tile):
                 surface.blit(self.base_image, self.rect.topleft)
 
     def debug_draw(self, surface):
-        s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-        if self.is_transforming:
-            s.fill((0, 255, 255, 255))
-        else:
-            s.fill((0, 255, 255, 128))
-        surface.blit(s, self.rect.topleft)
+        color = (0, 255, 255, 255) if self.is_transforming else (0, 255, 255, 128)
+        super().debug_draw(surface, color=color)
 
 
 class Coin(Tile):
@@ -166,12 +160,7 @@ class Coin(Tile):
         self.hitbox = self.rect.inflate(-20, -20)
         self.hitbox.center = self.rect.center
 
-        self.image = None
-        try:
-            self.image = pygame.image.load(texture_path).convert_alpha()
-            self.image = pygame.transform.scale(self.image, (TILE_SIZE, TILE_SIZE))
-        except pygame.error:
-            print(f"Текстура монеты '{texture_path}' не найдена.")
+        self.image = load_tile_image(texture_path)
 
     def draw(self, surface, debug_mode=False):
         if self.alpha > 0:
@@ -198,35 +187,20 @@ class Checkpoint(Tile):
         self.checkoff_path = checkoff
         self.checkon_path = checkon
         self.is_active = False
-
-        self.image_off = None
-        self.image_on = None
-
-        try:
-            self.image_off = pygame.image.load(self.checkoff_path).convert_alpha()
-            self.image_off = pygame.transform.scale(self.image_off, (TILE_SIZE, TILE_SIZE))
-        except pygame.error:
-            print(f"Текстура 'checkoff' '{self.checkoff_path}' не найдена.")
-
-        try:
-            self.image_on = pygame.image.load(self.checkon_path).convert_alpha()
-            self.image_on = pygame.transform.scale(self.image_on, (TILE_SIZE, TILE_SIZE))
-        except pygame.error:
-            print(f"Текстура 'checkon' '{self.checkon_path}' не найдена.")
+        self.image_off = load_tile_image(self.checkoff_path)
+        self.image_on = load_tile_image(self.checkon_path)
 
     def draw(self, surface):
         if self.is_active:
-            if self.image_on:
+            if self.image_on:  # Теперь эта проверка сработает
                 surface.blit(self.image_on, self.rect.topleft)
         else:
-            if self.image_off:
+            if self.image_off: # И эта тоже
                 surface.blit(self.image_off, self.rect.topleft)
 
     def debug_draw(self, surface):
-        s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
         color = (100, 255, 100, 255) if self.is_active else (100, 100, 255, 128)
-        s.fill(color)
-        surface.blit(s, self.rect.topleft)
+        super().debug_draw(surface, color=color)
 
     def activate(self):
         self.is_active = True
@@ -499,6 +473,7 @@ class Enemy:
             if self.pause_timer <= 0:
                 self.is_paused = False
                 self.direction *= -1
+                self._on_direction_change()
 
             self.anim_controller.reset_animation()
             self.anim_controller.update(dt)
@@ -543,6 +518,9 @@ class Enemy:
         if debug_mode:
             pygame.draw.rect(surface, (255, 255, 0), self.hitbox, 1)
 
+    def _on_direction_change(self):
+        pass
+
 
 def is_line_of_sight_clear(start_pos, end_pos, walls):
     for wall in walls:
@@ -554,7 +532,6 @@ def is_line_of_sight_clear(start_pos, end_pos, walls):
 class SuperEnemy(Enemy):
     def __init__(self, x, y, move_type, assets, speed=240, hitx=-5, hity=-5):
         super().__init__(x, y, move_type, assets, speed, hitx, hity)
-        self.color = (139, 0, 0)
         self.direction_look = 'right' if self.move_type == 'horizontal' else 'down'
 
         self.sight_length = 2.5 * TILE_SIZE
@@ -574,53 +551,11 @@ class SuperEnemy(Enemy):
             self.original_image = pygame.Surface((TILE_SIZE, TILE_SIZE))
             self.original_image.fill(self.color)
 
-    def update(self, walls, dt):
-        if self.is_paused:
-            self.pause_timer -= 1
-            if self.pause_timer <= 0:
-                self.is_paused = False
-                self.direction *= -1
-                if self.move_type == 'horizontal':
-                    self.direction_look = 'left' if self.direction == -1 else 'right'
-                elif self.move_type == 'vertical':
-                    self.direction_look = 'up' if self.direction == -1 else 'down'
-
-            self.anim_controller.reset_animation()
-            self.anim_controller.update(dt)
-            return
-
-        move_direction = None
+    def _on_direction_change(self):
         if self.move_type == 'horizontal':
-            move_direction = "right" if self.direction == 1 else "left"
+            self.direction_look = 'left' if self.direction == -1 else 'right'
         elif self.move_type == 'vertical':
-            move_direction = "down" if self.direction == 1 else "up"
-
-        if move_direction:
-            self.anim_controller.set_squash_stretch(move_direction)
-            self.anim_controller.set_tilt(move_direction)
-
-        old_x, old_y = self.x, self.y
-        move_distance = self.speed * self.direction * dt
-
-        if self.move_type == 'horizontal':
-            self.x += move_distance
-        elif self.move_type == 'vertical':
-            self.y += move_distance
-        self.rect.x = int(self.x)
-        self.rect.y = int(self.y)
-        self.hitbox.center = self.rect.center
-
-        for wall in walls:
-            if self.rect.colliderect(wall.rect):
-                self.x, self.y = old_x, old_y
-                self.rect.x = int(self.x)
-                self.rect.y = int(self.y)
-                self.hitbox.center = self.rect.center
-                self.is_paused = True
-                self.pause_timer = self.pause_duration
-                break
-
-        self.anim_controller.update(dt)
+            self.direction_look = 'up' if self.direction == -1 else 'down'
 
     def _cast_ray(self, start_pos, angle_rad, length, walls):
         end_x = start_pos[0] + math.cos(angle_rad) * length
@@ -1024,7 +959,7 @@ class Game:
         self.elapsed_time = 0
         self.clock = pygame.time.Clock()
 
-        self.debug_start_level = 0
+        self.debug_start_level = 3
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Игра-побег")
@@ -1068,10 +1003,20 @@ class Game:
         self.assets.load_sound("spawn", "./sounds/spawn.wav")
         self.assets.load_sound("finish", "./sounds/finish.wav")
 
+        self.default_sound_volume = 0.4
+
         self.player = Player(40, 40, self.assets)
         self.menu_manager = MenuManager(self)
 
         self.preload_menu_background()
+
+    def _play_sound(self, sound_name):
+        sound = self.assets.get_sound(sound_name)
+        if sound:
+            sound.set_volume(self.default_sound_volume)
+            channel = pygame.mixer.find_channel(True)
+            if channel:
+                channel.play(sound)
 
     def preload_menu_background(self):
         if self.level_names:
@@ -1103,12 +1048,7 @@ class Game:
         self.reset_game()
         self.load_current_level()
         self.game_state = "in_game"
-
-        sound = self.assets.get_sound("spawn")
-        if sound:
-            sound.set_volume(0.4)
-            channel = pygame.mixer.find_channel(True)
-            channel.play(sound)
+        self._play_sound("spawn")
 
     def quit_game(self):
         self.running = False
@@ -1155,11 +1095,7 @@ class Game:
             return True
         else:
             self.game_state = "win_screen"
-            sound = self.assets.get_sound("finish")
-            if sound:
-                sound.set_volume(0.4)
-                channel = pygame.mixer.find_channel(True)
-                channel.play(sound)
+            self._play_sound("finish")
             return False
 
     def run(self):
@@ -1271,11 +1207,7 @@ class Game:
             if new_wall:
                 self.walls.append(new_wall)
                 completed_transformations.append(tile)
-                sound = self.assets.get_sound("reverse")
-                if sound:
-                    sound.set_volume(0.4)
-                    channel = pygame.mixer.find_channel(True)
-                    channel.play(sound)
+                self._play_sound("reverse")
         for tile in completed_transformations:
             if tile in self.transforming_reverse_tiles: self.transforming_reverse_tiles.remove(tile)
             if tile in self.reverse_tiles: self.reverse_tiles.remove(tile)
@@ -1306,11 +1238,7 @@ class Game:
                     cp.deactivate()
                 checkpoint.activate()
                 self.active_checkpoint_pos = checkpoint.rect.topleft
-                sound = self.assets.get_sound("checkpoint")
-                if sound:
-                    sound.set_volume(0.4)
-                    channel = pygame.mixer.find_channel(True)
-                    channel.play(sound)
+                self._play_sound("checkpoint")
 
         player_needs_reset = False
         for enemy in self.enemies:
@@ -1332,22 +1260,14 @@ class Game:
 
         for door in self.doors:
             if self.player.hitbox.colliderect(door.rect):
-                sound = self.assets.get_sound("next_level")
-                if sound:
-                    sound.set_volume(0.4)
-                    channel = pygame.mixer.find_channel(True)
-                    channel.play(sound)
+                self._play_sound("next_level")
                 self.current_level_index += 1
                 self.active_checkpoint_pos = None
                 if not self.load_current_level():
                     break
 
         if player_needs_reset:
-            sound = self.assets.get_sound("death")
-            if sound:
-                sound.set_volume(0.4)
-                channel = pygame.mixer.find_channel(True)
-                channel.play(sound)
+            self._play_sound("death")
             self.game_state = "death_screen"
 
         for coin in self.coins:
@@ -1355,11 +1275,7 @@ class Game:
                 coin.is_collecting = True
                 self.score += coin.value
                 self.collected_coins_by_level.setdefault(self.current_level_index, set()).add(coin.rect.topleft)
-                sound = self.assets.get_sound("coin")
-                if sound:
-                    sound.set_volume(0.4)
-                    channel = pygame.mixer.find_channel(True)
-                    channel.play(sound)
+                self._play_sound("coin")
             coin.update()
         self.coins = [coin for coin in self.coins if coin.alpha > 0]
 
