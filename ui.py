@@ -93,7 +93,9 @@ class MenuManager:
         if game_state == "main_menu":
             button_list = self.main_menu_buttons
         elif game_state == "death_screen":
-            self.death_menu_buttons[0].disabled = self.game.active_checkpoint_pos is None
+            is_first_level = self.game.current_level_index == 0
+            no_checkpoint = self.game.active_checkpoint_pos is None
+            self.death_menu_buttons[0].disabled = is_first_level and no_checkpoint
             button_list = self.death_menu_buttons
         elif game_state == "win_screen":
             if self.win_animation_timer < self.win_animation_duration:

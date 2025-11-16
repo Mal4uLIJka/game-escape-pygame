@@ -31,7 +31,7 @@ class Game:
         self.elapsed_time = 0
         self.clock = pygame.time.Clock()
 
-        self.debug_start_level = 3
+        self.debug_start_level = 0
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Игра-побег")
@@ -151,9 +151,6 @@ class Game:
             if self.player_spawn:
                 self.player.start_pos = self.player_spawn
 
-            if self.current_level_index > 0 and self.player_spawn:
-                self.active_checkpoint_pos = self.player_spawn
-
             self.player.reset()
 
             if self.active_checkpoint_pos:
@@ -193,7 +190,9 @@ class Game:
 
     def update(self, mouse_pos, dt):
         if self.game_state == "in_game":
-            self.in_game_update(mouse_pos, dt)
+            self.elapsed_time = (pygame.time.get_ticks() - self.start_time) // 1000 + self.time_penalty
+
+            self.in_game_update(dt)
         else:
             self.menu_manager.update(mouse_pos, self.game_state)
 
@@ -249,9 +248,7 @@ class Game:
             if direction and self.player.next_direction == direction:
                 self.player.next_direction = None
 
-    def in_game_update(self, mouse_pos, dt):
-        self.elapsed_time = (pygame.time.get_ticks() - self.start_time) // 1000 + self.time_penalty
-
+    def in_game_update(self, dt):
         slow_tile_found = None
         for tile in self.slow_tiles:
             if self.player.hitbox.colliderect(tile.rect):

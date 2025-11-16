@@ -136,7 +136,7 @@ class Enemy:
         self.speed = float(speed)
         self.direction = 1
         self.color = (255, 0, 0) if speed > 240 else (180, 50, 50)
-        self.anim_controller = AnimationController(squash_factor=0.02, tilt_factor=5, anim_speed=speed / 120)
+        self.anim_controller = AnimationController(squash_factor=0.02, tilt_factor=5, anim_speed=1 + (speed / 240))
 
         self.is_paused = False
         self.pause_timer = 0
@@ -204,9 +204,19 @@ class Enemy:
 
         for wall in walls:
             if self.rect.colliderect(wall.rect):
-                self.x, self.y = old_x, old_y
-                self.rect.x = int(self.x)
-                self.rect.y = int(self.y)
+                if self.move_type == 'horizontal':
+                    if self.direction == 1:
+                        self.rect.right = wall.rect.left
+                    else:
+                        self.rect.left = wall.rect.right
+                    self.x = float(self.rect.x)
+                elif self.move_type == 'vertical':
+                    if self.direction == 1:
+                        self.rect.bottom = wall.rect.top
+                    else:
+                        self.rect.top = wall.rect.bottom
+                    self.y = float(self.rect.y)
+
                 self.hitbox.center = self.rect.center
                 self.is_paused = True
                 self.pause_timer = self.pause_duration
