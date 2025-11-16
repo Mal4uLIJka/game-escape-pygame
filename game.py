@@ -35,6 +35,7 @@ class Game:
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Игра-побег")
+        pygame.display.set_icon(pygame.image.load("images/super_angry_enemy.png"))
 
         self.running = True
         self.debug_mode = False
@@ -203,7 +204,7 @@ class Game:
             self.menu_manager.draw(self.screen, self.game_state)
 
         if self.game_state == "in_game":
-            self.menu_manager.draw_text_with_outline(self.screen, f"Очки: {self.score}  Время: {self.elapsed_time}c",
+            self.menu_manager.draw_text_with_outline(self.screen, f"Очки: {self.score}  Время: {self.elapsed_time}c" + (" Godmode: True" if self.player.godmode else ""),
                                                      self.font_small, WHITE,
                                                      (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 12), center_bottom=True)
 
@@ -211,6 +212,9 @@ class Game:
 
     def in_game_events(self, event):
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_g:
+                self.player.godmode = not self.player.godmode
+
             if event.key == pygame.K_v:
                 self.debug_mode = not self.debug_mode
 
@@ -334,6 +338,9 @@ class Game:
                 self.active_checkpoint_pos = None
                 if not self.load_current_level():
                     break
+
+        if self.player.godmode:
+            player_needs_reset = False
 
         if player_needs_reset:
             self._play_sound("death")

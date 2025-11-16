@@ -23,6 +23,7 @@ class Player:
         self.target_y = None
         self.anim_controller = AnimationController(squash_factor=0.04, tilt_factor=15)
         self.visible = True
+        self.godmode = False
 
         try:
             self.original_image = assets.get_image("hero", scale=(TILE_SIZE, TILE_SIZE))
