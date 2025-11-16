@@ -118,7 +118,7 @@ class MenuManager:
 
     def draw_main_menu(self, surface):
         surface.blit(self.game.main_menu_bg_dimmed, (0, 0))
-        self.draw_text_with_outline(surface, "Игра-побег", self.font_large, WHITE, (SCREEN_WIDTH // 2, 200))
+        self.draw_text_with_outline(surface, "Игра-побег", self.font_large, WHITE, (SCREEN_WIDTH // 2, 250))
         for button in self.main_menu_buttons:
             button.draw(surface)
 
